@@ -17,7 +17,7 @@ import {
 
 import { Image } from "expo-image";
 
-import * as FileSystem from "expo-file-system";
+import * as FileSystem from "expo-file-system/legacy";
 
 import * as ImagePicker from "expo-image-picker";
 
@@ -58,8 +58,9 @@ export default function CreateScreen() {
         selectedImage,
         {
           httpMethod: "POST",
-          uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-          mimeType: "image/jpeg",
+          headers: {
+            "Content-Type": "image/jpeg",
+          },
         }
       );
 
