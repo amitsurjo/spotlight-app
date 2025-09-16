@@ -2,8 +2,9 @@ import { COLORS } from "@/constants/theme";
 import { api } from "@/convex/_generated/api";
 import { Id } from "@/convex/_generated/dataModel";
 import { styles } from "@/styles/feed.styles";
+import { useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
-import { useMutation } from "convex/react";
+import { useMutation, useQuery } from "convex/react";
 import { Image } from "expo-image";
 import { Link } from "expo-router";
 import React, { useState } from "react";
@@ -35,8 +36,18 @@ export default function Post({ post }: PostProps) {
   const [commentsCount, setCommentsCount] = useState(post.comments);
   const [showComments, setShowComments] = useState(false);
 
+  const { user } = useUser();
+
+  // ✅ query current user from Convex
+  const currentUser = useQuery(
+    api.users.getUserByClerkId,
+    user ? { clerkId: user.id } : "skip"
+  );
+
+  // ✅ convex mutations
   const toggleLike = useMutation(api.posts.toggleLike);
   const toggleBookmark = useMutation(api.bookmarks.toggleBookmark);
+  const deletePostMutation = useMutation(api.posts.deletePost);
 
   const handleLike = async () => {
     try {
@@ -49,8 +60,21 @@ export default function Post({ post }: PostProps) {
   };
 
   const handleBookmark = async () => {
-    const newIsBookmarked = await toggleBookmark({ postId: post._id });
-    setIsBookmarked(newIsBookmarked);
+    try {
+      const newIsBookmarked = await toggleBookmark({ postId: post._id });
+      setIsBookmarked(newIsBookmarked);
+    } catch (error) {
+      console.error("Error toggling bookmark:", error);
+    }
+  };
+
+  const handleDelete = async () => {
+    try {
+      await deletePostMutation({ postId: post._id });
+      // ⚡ optional: optimistically remove the post from UI if parent passes a callback
+    } catch (error) {
+      console.error("Error deleting post:", error);
+    }
   };
 
   return (
@@ -69,15 +93,23 @@ export default function Post({ post }: PostProps) {
             <Text style={styles.postUsername}>{post.author.username}</Text>
           </TouchableOpacity>
         </Link>
-        {/* todo: fix it later */}
-        {/*<TouchableOpacity>
-          <Ionicons name="ellipsis-horizontal" size={20} color={COLORS.white} />
-        </TouchableOpacity>*/}
 
-        <TouchableOpacity>
-          <Ionicons name="trash-outline" size={20} color={COLORS.primary} />
-        </TouchableOpacity>
+        {/* if i'm the owner of the post, show the delete button  */}
+        {post.author._id === currentUser?._id ? (
+          <TouchableOpacity onPress={handleDelete}>
+            <Ionicons name="trash-outline" size={20} color={COLORS.primary} />
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity>
+            <Ionicons
+              name="ellipsis-horizontal"
+              size={20}
+              color={COLORS.white}
+            />
+          </TouchableOpacity>
+        )}
       </View>
+
       {/* IMAGE */}
       <Image
         source={post.imageUrl}
@@ -86,6 +118,7 @@ export default function Post({ post }: PostProps) {
         transition={200}
         cachePolicy="memory-disk"
       />
+
       {/* POST ACTIONS */}
       <View style={styles.postActions}>
         <View style={styles.postActionsLeft}>
@@ -112,11 +145,12 @@ export default function Post({ post }: PostProps) {
           />
         </TouchableOpacity>
       </View>
+
       {/* POST INFO */}
       <View style={styles.postInfo}>
         <Text style={styles.likesText}>
-          {post.likes > 0
-            ? `${post.likes.toLocaleString()} likes`
+          {likesCount > 0
+            ? `${likesCount.toLocaleString()} likes`
             : "Be the first to like"}
         </Text>
         {post.caption && (
