@@ -5,9 +5,10 @@ import { styles } from "@/styles/feed.styles";
 import { useUser } from "@clerk/clerk-expo";
 import { Ionicons } from "@expo/vector-icons";
 import { useMutation, useQuery } from "convex/react";
+import { formatDistanceToNow } from "date-fns";
 import { Image } from "expo-image";
 import { Link } from "expo-router";
-import React, { useState } from "react";
+import { useState } from "react";
 import { Text, TouchableOpacity, View } from "react-native";
 import CommentsModal from "./CommentsModal";
 
@@ -32,46 +33,37 @@ type PostProps = {
 export default function Post({ post }: PostProps) {
   const [isLiked, setIsLiked] = useState(post.isLiked);
   const [isBookmarked, setIsBookmarked] = useState(post.isBookmarked);
-  const [likesCount, setLikesCount] = useState(post.likes);
-  const [commentsCount, setCommentsCount] = useState(post.comments);
+
   const [showComments, setShowComments] = useState(false);
 
   const { user } = useUser();
 
-  // ✅ query current user from Convex
   const currentUser = useQuery(
     api.users.getUserByClerkId,
     user ? { clerkId: user.id } : "skip"
   );
 
-  // ✅ convex mutations
   const toggleLike = useMutation(api.posts.toggleLike);
   const toggleBookmark = useMutation(api.bookmarks.toggleBookmark);
-  const deletePostMutation = useMutation(api.posts.deletePost);
+  const deletePost = useMutation(api.posts.deletePost);
 
   const handleLike = async () => {
     try {
       const newIsLiked = await toggleLike({ postId: post._id });
       setIsLiked(newIsLiked);
-      setLikesCount((prev) => (newIsLiked ? prev + 1 : prev - 1));
     } catch (error) {
       console.error("Error toggling like:", error);
     }
   };
 
   const handleBookmark = async () => {
-    try {
-      const newIsBookmarked = await toggleBookmark({ postId: post._id });
-      setIsBookmarked(newIsBookmarked);
-    } catch (error) {
-      console.error("Error toggling bookmark:", error);
-    }
+    const newIsBookmarked = await toggleBookmark({ postId: post._id });
+    setIsBookmarked(newIsBookmarked);
   };
 
   const handleDelete = async () => {
     try {
-      await deletePostMutation({ postId: post._id });
-      // ⚡ optional: optimistically remove the post from UI if parent passes a callback
+      await deletePost({ postId: post._id });
     } catch (error) {
       console.error("Error deleting post:", error);
     }
@@ -81,7 +73,14 @@ export default function Post({ post }: PostProps) {
     <View style={styles.post}>
       {/* POST HEADER */}
       <View style={styles.postHeader}>
-        <Link href={"/(tabs)/notifications"}>
+        <Link
+          href={
+            currentUser?._id === post.author._id
+              ? "/(tabs)/profile"
+              : `/user/${post.author._id}`
+          }
+          asChild
+        >
           <TouchableOpacity style={styles.postHeaderLeft}>
             <Image
               source={post.author.image}
@@ -149,8 +148,8 @@ export default function Post({ post }: PostProps) {
       {/* POST INFO */}
       <View style={styles.postInfo}>
         <Text style={styles.likesText}>
-          {likesCount > 0
-            ? `${likesCount.toLocaleString()} likes`
+          {post.likes > 0
+            ? `${post.likes.toLocaleString()} likes`
             : "Be the first to like"}
         </Text>
         {post.caption && (
@@ -159,6 +158,18 @@ export default function Post({ post }: PostProps) {
             <Text style={styles.captionText}>{post.caption}</Text>
           </View>
         )}
+
+        {post.comments > 0 && (
+          <TouchableOpacity onPress={() => setShowComments(true)}>
+            <Text style={styles.commentsText}>
+              View all {post.comments} comments
+            </Text>
+          </TouchableOpacity>
+        )}
+
+        <Text style={styles.timeAgo}>
+          {formatDistanceToNow(post._creationTime, { addSuffix: true })}
+        </Text>
       </View>
 
       <CommentsModal
